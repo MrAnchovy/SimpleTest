@@ -4,10 +4,7 @@ SimpleTest Unit Testing for PHP
 This is a (possibly temporary) workspace for a personal fork of the SimpleTest unit
 testing framework for PHP. If you want the real thing, go to http://www.simpletest.org/.
 
-This is an unamended import of SimpleTest 1.1.0 from the packaged distribution. The
-untarred code is in the /simpletest/ directory.
-
-**Version 1.1.0**
+**Version 1.1.1-dev**
 
 Quick start
 -----------
