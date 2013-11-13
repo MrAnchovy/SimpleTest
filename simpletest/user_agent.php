@@ -3,7 +3,7 @@
  *  Base include file for SimpleTest
  *  @package    SimpleTest
  *  @subpackage WebTester
- *  @version    $Id: user_agent.php 2039 2011-11-30 18:16:15Z pp11 $
+ *  @version    $Id: user_agent.php 2051 2013-09-30 15:19:59Z pp11 $
  */
 
 /**#@+
@@ -212,7 +212,7 @@ class SimpleUserAgent {
      *    @access public
      */
     function fetchResponse($url, $encoding) {
-        if ($encoding->getMethod() != 'POST') {
+        if (!in_array($encoding->getMethod(), array('POST', 'PUT'))) {
             $url->addRequestParameters($encoding);
             $encoding->clear();
         }
