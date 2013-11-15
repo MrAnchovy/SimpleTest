@@ -37,10 +37,6 @@ if (class_exists('\Sins\Core')) {
     $app->registerClassAutoloader();
 }
 
-
-new \MyClass\MyClass;
-
-
 // just an example follows
 
 $useAutorun = false;
