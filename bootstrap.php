@@ -24,12 +24,21 @@ if (isset($startTime)) {
 }
 
 // set the directory containing Sins
-$local->rootPath = __DIR__;
+$local->baseDir = __DIR__ . DIRECTORY_SEPARATOR;
 
-if (!class_exists('\Sins\Core')) {
-    // we have no autoloader, so get one
+// try and autoload the core class
+if (class_exists('\Sins\Core')) {
+    $app = new \Sins\Core($local);
+} else{
+    // we have no autoloader so we will have to load it manually
     require __DIR__ . '/classes/Sins/Core.php';
+    // and register our own autoloader
+    $app = new \Sins\Core($local);
+    $app->registerClassAutoloader();
 }
+
+
+new \MyClass\MyClass;
 
 
 // just an example follows

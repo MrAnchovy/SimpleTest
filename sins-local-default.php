@@ -15,5 +15,7 @@ namespace Sins;
 
 class Local
 {
-
+    // these properties are set in bootstrap.php so do not set them here
+    public $baseDir;
+    public $startTime;
 }
