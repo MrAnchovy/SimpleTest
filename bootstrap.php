@@ -58,13 +58,13 @@ if ($useAutorun) {
 //        $this->addFile(dirname(__FILE__) . '/live_test.php');
 //        $this->addFile(dirname(__FILE__) . '/acceptance_test.php');
 
-class Suite_Show_Sins_is_working extends TestSuite
+class Example_TestSuite extends TestSuite
 {
-    function Suite_Show_Sins_is_working() {
+    function Example_TestSuite() {
         // REVISIT why do we need this?
         parent::__construct();
-        $this->TestSuite('Show Sins is working - Sins version '.'2.0.0-dev');
-        $this->addFile('tests/example/test_Demonstration_of_SimpleTest_tests.php');
+        $this->TestSuite('Show Sins is working - Sins version ' . \Sins\Core::VERSION);
+        $this->addFile('test/example/test_Demonstration_of_SimpleTest_tests.php');
     }
 }
 
@@ -75,7 +75,7 @@ if ($useAutorun) {
 
 } else {
 
-    $testSuite = new Suite_Show_Sins_is_working;
+    $testSuite = new Example_TestSuite;
     $testSuite->run(new HtmlReporter);
 
 }
