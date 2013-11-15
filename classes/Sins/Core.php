@@ -18,16 +18,33 @@ class Core
     const VERSION = '2.0.0-dev';
 
     protected $classDir;
+    protected $local;
 
     /**
-     * Constructor
+     * Constructor.
     **/
     public function __construct($local) {
         $this->local = $local;
+        $this->bootstrapExceptions();
+        $this->request = new Request;
     }
 
     /**
-     * SPL class loader
+     * Set up error and exception handling.
+    **/
+    public function bootstrapExceptions() {
+        Exception::$app = $this;
+        set_exception_handler(array($this, 'exceptionHandler'));
+        error_reporting(-1);
+        // ini_set('display_errors', 0);
+        ini_set('display_errors', 1);
+        // throw new \Exception('oops'); // test
+    }
+
+
+
+    /**
+     * SPL class loader.
     **/
     function classAutoloader($className)
     {
@@ -45,7 +62,16 @@ class Core
     }
 
     /**
-     * Register SPL class loader
+     * Exception handler.
+    **/
+    function exceptionHandler(\Exception $e)
+    {
+        // rethrow as \Namespace\Exception
+        throw new Exception($e);
+    }
+
+    /**
+     * Register SPL class loader.
     **/
     public function registerClassAutoloader()
     {
@@ -55,8 +81,39 @@ class Core
 
 }
 
+class Exception extends \Exception
+{
+    public static $app;
+
+    public function __construct($message = null, $vars = array(), $status = 500, $previous = null)
+    {
+        try {
+            $message = strtr($message, $vars);
+        } catch (\Exception $ee) {
+            $message = $ee->getMessage() . " after $message";
+            $status = 500;
+        }
+        parent::__construct($message, 0, $previous);
+        if (isset(self::$app) && isset(self::$app->response)) {
+            self::$app->response->body = $this->getMessage();
+            self::$app->response->status = $status;
+            self::$app->response->send();
+        } else {
+            header("HTTP/1.1 $status");
+            header("Content-Type: text/plain");
+            echo $this->getMessage();
+        }
+    }
+
+}
+
 class Request
 {
+    public $headers = array();
+    public $body;
+    public $params = array();
+    public $query;
+
     public function __construct()
     {
         $this->parseRequest();
@@ -66,19 +123,34 @@ class Request
         try {
             $this->method = $_SERVER['REQUEST_METHOD'];
             if ($this->method === 'GET') {
+                $this->params = $_GET;
             } elseif ($this->method === 'GET') {
             }
-            $this->params = $_GET;
         } catch (\Exception $e) {
             // invalid request!
-            $ee = new Exception('Bad Request', array(), 400, $e);
+            throw new Exception('Bad Request', array(), 400, $e);
         }
     }
 }
 
 class Response
 {
+    public $status;
+    public $body;
     public function __construct()
     {
+    }
+    public function send()
+    {
+        foreach($this->headers as $name => $value) {
+            if (is_array($value)) {
+                foreach($value as $v) {
+                    header("name: $value;");
+                }
+            } else {
+                header("$name: $value;");
+            }
+        }
+        echo $this->body;
     }
 }
