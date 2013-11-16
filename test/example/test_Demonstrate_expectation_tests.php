@@ -1,6 +1,6 @@
 <?php
 
-class Test_Show_expect_matcher_tests extends \Sins\TestCase\ExpectMatcherTestCase
+class Test_Demonstrate_expectation_tests extends \Sins\TestCase\ExpectationTestCase
 {
 
     function test_The_toBeNull_expectation_should_work() {
@@ -100,7 +100,7 @@ class Test_Show_expect_matcher_tests extends \Sins\TestCase\ExpectMatcherTestCas
 }
 
 
-
+/**
 class AllTests extends TestSuite {
     function AllTests() {
         $this->TestSuite('Simpletest tests');
@@ -124,4 +124,6 @@ class TestSimpletestTests extends UnitTestCase {
         $this->assertNotNull(false, 'false should not be null');
     }
 }
+
+**/
 

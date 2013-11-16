@@ -5,11 +5,11 @@ namespace Sins\TestCase;
 // TODO build the expectations in expectation.php
 
 
-class ExpectMatcherTestCase extends \SimpleTestCase {
+class ExpectationTestCase extends \SimpleTestCase {
 
-    private $value;
-    private $expected;
-    private $not;
+    protected $value;
+    protected $expected;
+    protected $not;
 
     function expect($value)
     {
