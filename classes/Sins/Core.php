@@ -58,7 +58,9 @@ class Core
         }
         $fileName .= str_replace('_', DIRECTORY_SEPARATOR, $className) . '.php';
 
-        require $fileName;
+        if (file_exists($fileName)) {
+            include $fileName;
+        }
     }
 
     /**
