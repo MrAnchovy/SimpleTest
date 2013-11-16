@@ -70,6 +70,7 @@ class Example_TestSuite extends TestSuite
         parent::__construct();
         $this->TestSuite('Show Sins is working - Sins version ' . \Sins\Core::VERSION);
         $this->addFile('test/example/test_Demonstration_of_SimpleTest_tests.php');
+        $this->addFile('test/example/test_Show_expect-matcher_tests.php');
     }
 }
 
@@ -81,6 +82,6 @@ if ($useAutorun) {
 } else {
 
     $testSuite = new Example_TestSuite;
-    $testSuite->run(new HtmlReporter);
+    $testSuite->run(new \Sins\Reporter\JsonReporter);
 
 }
