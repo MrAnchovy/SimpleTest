@@ -9,18 +9,30 @@
 
 namespace Sins\Reporter;
 
-// require_once(\Sins\Interface(__FILE__) . '/scorer.php');
-// require_once(dirname(__FILE__) . '/arguments.php');
-
 // class JsonReporter extends \SimpleReporter
 class JsonReporter
 {
-
-    protected $data;
-    protected $groupStack = array();
+    /**
+     * Title of current file, class and method.
+    **/
     protected $current = array();
+
+    /**
+     * Count of tests, passes, fails etc. for the group on top of the stack.
+    **/
     protected $currentGroupCounts = array();
 
+    /**
+     * Array of messages (test results, group header/footer).
+    **/
+    protected $data = array();
+
+    /**
+     * Stack of groups (testcase, file, class, method).
+    **/
+    protected $groupStack = array();
+
+// --- REVISIT these legacy methods -------------------------------------------
 
     /**
      * The legacy test case calls this method to let the reporter modify the
@@ -30,20 +42,9 @@ class JsonReporter
      * @param   SimpleInvoker $invoker   Individual test runner.
      * @return  SimpleInvoker           Wrapped test runner.
     **/
-    public function createInvoker($invoker) {
-        return $invoker;
-    }
-
-    /**
-     * The legacy test runner calls this method to tell the reporter that it is
-     * a dry run. This functionality is not implemented so it is ignored.
-     *
-     * @REVISIT       Rewrite the test runner and delete this method.
-     * @param   bool  Set or unset the dry run status.
-     * @return  void
-    **/
-    public function makeDry($set = true)
+    public function createInvoker($invoker)
     {
+        return $invoker;
     }
 
     /**
@@ -73,6 +74,18 @@ class JsonReporter
     }
 
     /**
+     * The legacy test runner calls this method to tell the reporter that it is
+     * a dry run. This functionality is not implemented so it is ignored.
+     *
+     * @REVISIT       Rewrite the test runner and delete this method.
+     * @param   bool  Set or unset the dry run status.
+     * @return  void
+    **/
+    public function makeDry($set = true)
+    {
+    }
+
+    /**
      * The legacy test runner calls this method to let the reporter veto whether
      * a test should be run. Why?
      *
@@ -89,6 +102,17 @@ class JsonReporter
 // PUBLIC METHODS -------------------------------------------------------------
     
     /**
+     * This is called by the runner at the end of each 'case' (i.e. a class)
+     *
+     * @param   string  The class name.
+     * @return  void
+    **/
+    public function paintCaseEnd($title)
+    {
+        $this->reportGroupEnd();
+    }
+
+    /**
      * This is called by the runner at the start of each 'case' (i.e. a class)
      *
      * @param   string  The class name.
@@ -97,41 +121,65 @@ class JsonReporter
     public function paintCaseStart($title)
     {
         $this->current['class'] = $title;
-        $this->startGroup($title, 'class');
+        $this->reportGroupBegin($title, 'class');
     }
 
     /**
-     * This is called by the runner at the end of each 'case' (i.e. a class)
+     * This is called by the test runner when there has been an unexpected error
+     * (not an exception or an expected error) during test execution.
      *
-     * @param   string  The class name.
+     * @param   string  The message.
      * @return  void
     **/
-    public function paintCaseEnd($title)
+    public function paintError($message)
     {
-        $this->endGroup();
+        $this->increment('error');
+        $this->reportTest('Error', $message);
     }
 
     /**
-     * This is called by the runner at the start of each method.
+     * This is called by the test runner when there has been an unexpected
+     * exception during test execution.
      *
-     * @param   string  The method name.
+     * @param   Exception  An Exception object.
      * @return  void
     **/
-    public function paintMethodStart($title)
-    {
-        $this->current['method'] = $title;
-        $this->startGroup($title, 'method');
+    public function paintException(\Exception $e) {
+        $this->increment('exception');
+        $message = get_class($e)
+            . $e->getMessage()
+            . ' in ' . $e->getFile()
+            . ' at line ' . $e->getLine();
+        $this->reportTest('Exception', $message);
     }
 
     /**
-     * This is called by the runner at the end of each method.
+     * This is called by the test runner when a test has failed.
      *
-     * @param   string  The method name.
+     * @param    Exception  An Exception object.
+     * @returns  void
+    **/
+    public function paintFail($message)
+    {
+        $this->increment('fail');
+        $this->reportTest('Fail', $message);
+    }
+
+    /**
+     * This is called by the runner at the start of the testsuite and at the start
+     * of each file.
+     *
+     * @param   string  The testsuite or file name.
      * @return  void
     **/
-    public function paintMethodEnd($title)
+    public function paintGroupEnd($title)
     {
-        $this->endGroup();
+        $this->reportGroupEnd();
+
+        // if the stack is now empty we have reached the end
+        if (count($this->groupStack) === 0) {
+            $this->reportEnd();
+        }
     }
 
     /**
@@ -148,31 +196,141 @@ class JsonReporter
 
             case 0 :
                 // if the stack is empty it must be the start
-                $this->startReport($title, $size);
-                $this->startGroup($title, 'testsuite');
+                $this->reportBegin($title, $size);
+                $this->reportGroupBegin($title, 'testsuite');
                 break;
 
             case 1 :
                 // this is a new file
-                $this->startGroup($title, 'file');
+                $this->reportGroupBegin($title, 'file');
                 $this->current['file'] = $title;
                 break;
 
             default:
-                $this->startGroup($title, 'unknown');
+                $this->reportGroupBegin($title, 'unknown');
         }
     }
 
     /**
-     * This is called by the runner at the start of the testsuite and at the start
-     * of each file.
+     * This is called by the runner at the start of each method.
      *
-     * @param   string  The testsuite or file name.
+     * @param   string  The method name.
      * @return  void
     **/
-    public function paintGroupEnd($title)
+    public function paintMethodStart($title)
     {
-        $this->endGroup();
+        $this->current['method'] = $title;
+        $this->reportGroupBegin($title, 'method');
+    }
+
+    /**
+     * This is called by the runner at the end of each method.
+     *
+     * @param   string  The method name.
+     * @return  void
+    **/
+    public function paintMethodEnd($title)
+    {
+        $this->reportGroupEnd();
+    }
+
+    /**
+     * This is called by the test runner when a test has passed.
+     *
+     * @param    Exception  An Exception object.
+     * @returns  void
+    **/
+    public function paintPass($message)
+    {
+        $this->increment('pass');
+        $this->reportTest('Pass', $message);
+    }
+
+    /**
+     * This is called by the test runner when a test has been skipped.
+     *
+     * @param    Exception  An Exception object.
+     * @returns  void
+    **/
+    public function paintSkip($message) {
+        $this->increment('skip');
+        $this->reportTest('Skip', $message);
+    }
+
+// PRIVATE METHODS -------------------------------------------------------------
+
+    /**
+     * Increment a counter for the current group.
+     *
+     * @param   string  The counter name.
+     * @return  void
+    **/
+    protected function increment($counter)
+    {
+        $this->currentGroupCounts['tests']++;
+        if (isset($this->currentGroupCounts[$counter])) {
+            $this->currentGroupCounts[$counter]++;
+        } else {
+            $this->currentGroupCounts[$counter] = 1;
+        }
+    }
+
+    /**
+     * Paint the header - this is not part of the interface with the runner.
+     *
+     * @param   string  The title of the test suite.
+     * @return  void
+    **/
+    protected function reportBegin($name, $size) {
+        $message = array(
+            'type' => 'ReportStart',
+            'time' => date(DATE_ISO8601),
+            'reporter' => __CLASSNAME__,
+            'version' => 'Sins ' . \Sins\Core::VERSION,
+        );
+        $this->reportEvent($message);
+    }
+
+    /**
+     * Paint the footer - called at the end of the test suite.
+     *
+     * @TODO            Use $response instead of sending header directly.
+     * @param   string  The title of the test suite.
+     * @return  void
+    **/
+    protected function reportEnd()
+    {
+        $message = array(
+            'type' => 'ReportEnd',
+            'time' => date(DATE_ISO8601),
+        );
+        $this->reportEvent($message);
+
+        // build the message
+        $message = array(
+            'status' => 'ok',
+            'events' => $this->data,
+        );
+
+        // send it
+        if (false) {
+            header('Content-Type: application/json');
+            echo json_encode($this->data);
+        } else {
+            header('Content-Type: text/plain');
+            echo json_encode($message, JSON_PRETTY_PRINT);
+        }
+    }
+
+    /**
+     * Add an event to the report.
+     *
+     * @param    array  The event.
+     * @returns  void
+    **/
+    protected function reportEvent($event)
+    {
+        $this->data[] = $event;
     }
 
     /**
@@ -182,7 +340,7 @@ class JsonReporter
      * @param   string  Group type (testsuite, class, method).
      * @return  void
     **/
-    protected function startGroup($title, $type)
+    protected function reportGroupBegin($title, $type)
     {
         // set up the event details
         $group = array(
@@ -206,7 +364,7 @@ class JsonReporter
      *
      * @return  void
     **/
-    protected function endGroup()
+    protected function reportGroupEnd()
     {
         // get the current group
         $group = array_pop($this->groupStack);
@@ -214,24 +372,25 @@ class JsonReporter
         // merge in the counters
         $group['count'] = $this->currentGroupCounts;
 
-        $top = count($this->groupStack) - 1;
+        // if there is anything left on the stack, add to its counters
+        if (count($this->groupStack) > 0) {
+            // add the counts to the group on the top of the stack
+            $top =& $this->groupStack[count($this->groupStack) - 1];
 
-        // add the counts to the group on the top of the stack
-        $top =& $this->groupStack[count($this->groupStack) - 1];
-
-        if (isset($top['count'])) {
-            foreach ($this->currentGroupCounts as $counter => $count) {
-                if (isset($top['count'][$counter])) {
-                    $top['count'][$counter] += $count;
-                } else {
-                    $top['count'][$counter] = $count;
+            if (isset($top['count'])) {
+                foreach ($this->currentGroupCounts as $counter => $count) {
+                    if (isset($top['count'][$counter])) {
+                        $top['count'][$counter] += $count;
+                    } else {
+                        $top['count'][$counter] = $count;
+                    }
                 }
+            } else {
+                $top['count'] = $this->currentGroupCounts;
             }
-        } else {
-            $top['count'] = $this->currentGroupCounts;
-        }
 
-        $this->currentGroupCounts = $top['count'];
+            $this->currentGroupCounts = $top['count'];
+        }
 
         // report the event
         $group['type'] = 'GroupEnd';
@@ -239,184 +398,32 @@ class JsonReporter
     }
 
     /**
-     * Increment a counter for the current group.
+     * Paint a message.
      *
-     * @param   string  The counter name.
-     * @return  void
+     * @param    string  Message type (Pass, Fail, Error, Exception, Skip).
+     * @param    string  The message.
+     * @returns  void
     **/
-    protected function increment($counter)
+    protected function reportTest($type, $message)
     {
-        $this->currentGroupCounts['tests']++;
-        if (isset($this->currentGroupCounts[$counter])) {
-            $this->currentGroupCounts[$counter]++;
+        if (is_array($message)) {
+            $result = array_merge(
+                array(
+                    'type' => 'test',
+                    'result' => $type,
+                ),
+                $message,
+                $this->current
+            );
         } else {
-            $this->currentGroupCounts[$counter] = 1;
+            $result = array_merge(array(
+                'type' => 'test',
+                'result' => $type,
+                'title' => $message,
+                ),
+                $this->current
+            );
         }
+        $this->reportEvent($result);
     }
-
-    /**
-     * This is called by the test runner when there has been an unexpected error
-     * (not an exception or an expected error) during test execution.
-     *
-     * @param   string  The message.
-     * @return  void
-    **/
-    public function paintError($message)
-    {
-        $this->increment('error');
-        $this->paintTypedMessage('Error', $message);
-    }
-
-    /**
-     * This is called by the test runner when there has been an unexpected
-     * exception during test execution.
-     *
-     * @param   Exception  An Exception object.
-     * @return  void
-    **/
-    public function paintException(\Exception $e) {
-        $this->increment('exception');
-        $message = get_class($e)
-            . $e->getMessage()
-            . ' in ' . $e->getFile()
-            . ' at line ' . $e->getLine();
-        $this->paintTypedMessage('Exception', $message);
-    }
-
-    /**
-     * This is called by the test runner when a test has failed.
-     *
-     * @param    Exception  An Exception object.
-     * @returns  void
-    **/
-    public function paintFail($message)
-    {
-        $this->increment('fail');
-        $this->paintTypedMessage('Fail', $message);
-    }
-
-    /**
-     * This is called by the test runner when a test has passed.
-     *
-     * @param    Exception  An Exception object.
-     * @returns  void
-    **/
-    public function paintPass($message)
-    {
-        $this->increment('pass');
-        $this->paintTypedMessage('Pass', $message);
-    }
-
-    /**
-     * This is called by the test runner when a test has been skipped.
-     *
-     * @param    Exception  An Exception object.
-     * @returns  void
-    **/
-    public function paintSkip($message) {
-        $this->increment('skip');
-        $this->paintTypedMessage('Skip', $message);
-    }
-
-    /**
-     * Paint a message.
-     *
-     * @param    string  Message type (Pass, Fail, Error, Exception, Skip).
-     * @param    string  The message.
-     * @returns  void
-    **/
-    protected function paintMessage($message)
-    {
-        $this->paintTypedMessage('Unknown', $message);
-    }
-
-    /**
-     * Paint a message.
-     *
-     * @param    string  Message type (Pass, Fail, Error, Exception, Skip).
-     * @param    string  The message.
-     * @returns  void
-    **/
-    protected function paintTypedMessage($type, $message)
-    {
-        echo "[$type: ";
-        print "$message : ";
-        echo $this->getTrace();
-        echo "]\n";
-    }
-
-
-    /**
-     *    Accessor for internal test stack. For
-     *    subclasses that need to see the whole test
-     *    history for display purposes.
-     *    @return array     List of methods in nesting order.
-     *    @access public
-     */
-    protected function getTrace()
-    {
-        extract($this->current);
-        return "File:$file > Class:$class > Method:$method";
-    }
-
-
-
-
-
-
-
-
-    /**
-     * Add an event to the report.
-     *
-     * @param    array  The event.
-     * @returns  void
-    **/
-    protected function reportEvent($event)
-    {
-        $this->data[] = $event;
-        print_r($event);
-    }
-
-    /**
-     * Paint the header - this is not part of the interface with the runner.
-     *
-     * @TODO            Use $response instead of sending header directly.
-     * @param   string  The title of the test suite.
-     * @return  void
-    **/
-    protected function startReport($name, $size) {
-        header('Content-Type: text/plain');
-    }
-
-
-
-
-
-
-    /**
-     * Paint the footer - called at the end of the test suite.
-     *
-     * @param    string  The title of the test suite.
-     * @returns  void
-    **/
-    protected function paintFooter($name)
-    {
-
-        echo "[Footer: $name]\n";
-        return;
-
-        $colour = ($this->getFailCount() + $this->getExceptionCount() > 0 ? "red" : "green");
-        print "<div style=\"";
-        print "padding: 8px; margin-top: 1em; background-color: $colour; color: white;";
-        print "\">";
-        print $this->getTestCaseProgress() . "/" . $this->getTestCaseCount();
-        print " test cases complete:\n";
-        print "<strong>" . $this->getPassCount() . "</strong> passes, ";
-        print "<strong>" . $this->getFailCount() . "</strong> fails and ";
-        print "<strong>" . $this->getExceptionCount() . "</strong> exceptions.";
-        print "</div>\n";
-        print "</body>\n</html>\n";
-    }
-
 }
