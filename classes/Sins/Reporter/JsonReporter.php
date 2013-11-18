@@ -12,6 +12,13 @@ namespace Sins\Reporter;
 // class JsonReporter extends \SimpleReporter
 class JsonReporter
 {
+
+    /**
+     * Setting for formatting timestamps - either a date() format string or a
+     * DateTimezone constant name.00
+    **/
+    protected $timeFormat = 'ISO8601';
+
     /**
      * Title of current file, class and method.
     **/
@@ -31,6 +38,19 @@ class JsonReporter
      * Stack of groups (testcase, file, class, method).
     **/
     protected $groupStack = array();
+
+    /**
+     * (micro)timestamp of the last event
+    **/
+    protected $lastEventTime;
+
+    public function __construct()
+    {
+        if (defined("DateTime::$this->timeFormat")) {
+            $this->timeFormat = constant("DateTime::$this->timeFormat");
+        }
+    }
+
 
 // --- REVISIT these legacy methods -------------------------------------------
 
@@ -284,8 +304,8 @@ class JsonReporter
     protected function reportBegin($name, $size) {
         $message = array(
             'type' => 'ReportStart',
-            'time' => date(DATE_ISO8601),
-            'reporter' => __CLASSNAME__,
+            'startTime' => date($this->timeFormat),
+            'reporter' => __CLASS__,
             'version' => 'Sins ' . \Sins\Core::VERSION,
         );
         $this->reportEvent($message);
@@ -302,7 +322,7 @@ class JsonReporter
     {
         $message = array(
             'type' => 'ReportEnd',
-            'time' => date(DATE_ISO8601),
+            'endTime' => date($this->timeFormat),
         );
         $this->reportEvent($message);
 
@@ -330,6 +350,7 @@ class JsonReporter
     **/
     protected function reportEvent($event)
     {
+        $this->lastEventTime = microtime(true);
         $this->data[] = $event;
     }
 
@@ -346,6 +367,7 @@ class JsonReporter
         $group = array(
             'groupType' => $type,
             'title' => $title,
+            'time' => microtime(true),
         );
 
         // put this on the stack
@@ -353,6 +375,9 @@ class JsonReporter
 
         // reset the counters
         $this->currentGroupCounts = array('tests' => 0);
+
+        // drop the microtime from the report
+        unset($group['time']);
 
         // report the event
         $group['type'] = 'GroupStart';
@@ -371,6 +396,7 @@ class JsonReporter
 
         // merge in the counters
         $group['count'] = $this->currentGroupCounts;
+        $group['time'] = round(microtime(true) - $group['time'], 6);
 
         // if there is anything left on the stack, add to its counters
         if (count($this->groupStack) > 0) {
@@ -407,19 +433,23 @@ class JsonReporter
     protected function reportTest($type, $message)
     {
         if (is_array($message)) {
+            // deal with new title/expectation/file/line message
             $result = array_merge(
                 array(
                     'type' => 'test',
                     'result' => $type,
+                    'time' => microtime(true) - $this->lastEventTime,
                 ),
                 $message,
                 $this->current
             );
         } else {
+            // deal with legacy plaintext message
             $result = array_merge(array(
                 'type' => 'test',
                 'result' => $type,
                 'title' => $message,
+                'time' => round(microtime(true) - $this->lastEventTime, 6),
                 ),
                 $this->current
             );
