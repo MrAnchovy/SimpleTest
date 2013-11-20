@@ -31,6 +31,7 @@ class Test_Demonstrate_expectation_tests extends \Sins\TestCase\ExpectationTestC
     function test_The_toBeFalse_expectation_should_work() {
         $obj = new StdClass;
         $arr = array();
+
         $this->expect(null)  ->not()->toBeFalse('null should not be false');
         $this->expect(true)  ->not()->toBeFalse('true should not be false');
         $this->expect(false)        ->toBeFalse('false should be false');
@@ -64,9 +65,9 @@ class Test_Demonstrate_expectation_tests extends \Sins\TestCase\ExpectationTestC
         $arr = (array) $obj;
         $this->expect($arr)->not()->toBeTruthy('... but an empty array is not.');
 
-        $this->expect(0 == null)         ->toBeTrue('0 == null is true...');
-        $this->expect(0 == '0')          ->toBeTrue('...as is 0 == "0"...');
-        $this->expect('0' == null)->not()->toBeTrue('...but "0" == null is false!');
+        $this->expect('0' == 0)          ->toBeTrue('"0" == 0...');
+        $this->expect(0 == null)         ->toBeTrue('...and 0 == null...');
+        $this->expect('0' == null)->not()->toBeTrue('...but "0" != null - == is not transitive!');
 
     }
 
@@ -81,18 +82,18 @@ class Test_Demonstrate_expectation_tests extends \Sins\TestCase\ExpectationTestC
     }
 
     function test_Expectation_Tests_should_work_on_true() {
-        $this->expect(true)->toBe(true, 'null should equal null');
-        $this->expect(true)->not()->toBe(false, 'null should not equal false');
-        $this->expect(true)->not()->toBe(false, 'null should not equal false');
-        $this->expect(true)->toBeNull('null should be null');
-        $this->expect(true)->not()->toBeFalse('null should not be false');
+        $this->expect(true)->toBe(true);
+        $this->expect(true)->not()->toBeFalse();
+        $this->expect(true)->not()->toBe(false);
+        $this->expect(true)->not()->toBeNull();
+        $this->expect(true)->not()->toBeFalse();
     }
 
     function test_Expectation_Tests_should_work_on_false() {
-        $this->expect(false)->toBe(false, 'false should equal false');
-        $this->expect(false)->not()->toBe(null, 'false should not equal null');
-        $this->expect(false)->toBeFalse('false should be false');
-        $this->expect(false)->not()->toBeNull('false should not be null');
+        $this->expect(false)->toBe(false);
+        $this->expect(false)->not()->toBe(null);
+        $this->expect(false)->toBeFalse();
+        $this->expect(false)->not()->toBeNull();
     }
 
 
