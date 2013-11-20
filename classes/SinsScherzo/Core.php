@@ -1,17 +1,22 @@
 <?php
 /**
- * These are the core classes for Sins.
+ * These are the core classes for Scherzo.
  *
- * This file includes the following classeIt includes  is supplied with settings that should work "out of the box", but you will
- * want to change these - see the documentation for more information.
+ * This file includes the following classes
+ *   * Core
+ *   * Controller
+ *   * Exception
+ *   * Request
+ *   * Response
+ *   * Route
  *
- * @package    Sins
- * @link       https://github.org/MrAnchovy/Sins
+ * @package    Scherzo
+ * @link       https://github.org/MrAnchovy/Scherzo
  * @copyright  Copyright © 2013 [MrAnchovy](http://www.mranchovy.com/).
  * @license    [MIT](http://opensource.org/licenses/MIT)
 **/
 
-namespace Sins;
+namespace SinsScherzo;
 
 class Core
 {
@@ -25,14 +30,35 @@ class Core
     **/
     public function __construct($local) {
         $this->local = $local;
-        $this->bootstrapTimezone();
-        $this->bootstrapExceptions();
+    }
+
+    /**
+     * Bootstrap the core.
+    **/
+    public function bootstrap() {
+        $app = new Container;
+        $app->share('local', $this->local);
+        $this->bootstrapTimezone($app);
+        $this->bootstrapExceptions($app);
+        return $app;
+    }
+
+    /**
+     * Set up error and exception handling.
+    **/
+    protected function bootstrapExceptions($app) {
+        Exception::$app = $app;
+        set_exception_handler(array($this, 'exceptionHandler'));
+        error_reporting(-1);
+        // ini_set('display_errors', 0);
+        ini_set('display_errors', 1);
+        // throw new \Exception('oops'); // test
     }
 
     /**
      * Deal with unset default timezone.
     **/
-    protected function bootstrapTimezone()
+    protected function bootstrapTimezone($app)
     {
         if (isset($this->local->timezone)) {
             // if it is set explicitly, use it
@@ -43,17 +69,6 @@ class Core
                 date_default_timezone_set('UTC');
             }
         }
-    }
-    /**
-     * Set up error and exception handling.
-    **/
-    protected function bootstrapExceptions() {
-        Exception::$app = $this;
-        set_exception_handler(array($this, 'exceptionHandler'));
-        error_reporting(-1);
-        // ini_set('display_errors', 0);
-        ini_set('display_errors', 1);
-        // throw new \Exception('oops'); // test
     }
 
     /**
@@ -97,13 +112,55 @@ class Core
 } // end class Core
 
 
-class Controller
+class Container
+{
+    protected $param;
+    protected $shared;
+
+    public function share($name, $share, $params = null)
+    {
+        if (is_object($share)) {
+            $this->shared[$name] = $share;
+        } else {
+            $this->shared[$name] = array($share, $params);
+        }
+    }
+
+    public function shared($name)
+    {
+        if (isset($this->shared[$name])) {
+            $share = $this->shared[$name];
+        } else {
+            return null;
+        }
+        if (is_object($share)) {
+            return $share;
+        } elseif (is_array($share)) {
+            $this->shared[$name] = new $share[0]($this, $share[1]);
+        } else {
+            $this->shared[$name] = new $share($this);
+        }
+        return $this->shared[$name];
+    }
+
+    public function setParam($name, $value)
+    {
+        $this->params[$name] = $value;
+    }
+
+    public function param($name)
+    {
+        return array_key_exists($this->param, $name) ? $this->param[$name] : null;
+    }
+}
+
+abstract class Controller
 {
     protected $app;
     protected $request;
     protected $response;
 
-    public function __construct(Request $request, Response $response, Core $app)
+    public function __construct(Request $request, Response $response, Container $app)
     {
         $this->request = $request;
         $this->response = $response;
@@ -112,7 +169,6 @@ class Controller
 
     public function invoke()
     {
-        $this->response->body = 'Hi there';
     }
 } // end class Controller
 
@@ -150,14 +206,14 @@ class Request
 {
     protected $app;
     public $path;
+    public $route;
     protected $body;
     protected $params = array();
     protected $query = array();
 
-    public function __construct(Core $app)
+    public function __construct(Container $app)
     {
         $this->app = $app;
-        $this->path = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : null;
     }
 
     public function getHeader($name, $default = null)
@@ -176,31 +232,24 @@ class Request
 
     public function getParam($name = null, $default = null)
     {
-        if (array_key_exists($this->params, $name)) {
-            return $this->params[$name];
-        } else {
-            return $default;
-        }
+        return array_key_exists($this->params, $name) ? $this->params[$name] : $default;
     }
 
     public function getQuery($name = null, $default = null)
     {
-        if (array_key_exists($this->query, $name)) {
-            return $this->query[$name];
-        } else {
-            return $default;
-        }
+        return array_key_exists($this->query, $name) ? $this->query[$name] : $default;
     }
 
     public function parseHttp()
     {
         try {
+            $this->path = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : null;
             $this->method = $_SERVER['REQUEST_METHOD'];
             if ($this->method === 'GET') {
                 $this->params = $_GET;
             } else {
                 $this->params = $_POST;
-                $this->query = $_GET;
+                $this->query  = $_GET;
             }
         } catch (\Exception $e) {
             // invalid request!
@@ -298,10 +347,10 @@ class Response
             $method = "send_$this->contentType";
             $this->$method();
         } catch (Exception $e) {
-            // rethrow a Sins exception
+            // rethrow a Scherzo exception
             throw $e;
         } catch (\Exception $e) {
-            // convert an ordinary exception into a Sins exception
+            // convert an ordinary exception into a Scherzo exception
             throw new Exception($e->getMessage, array(), $e);
         }
     }
@@ -322,10 +371,10 @@ class Response
         try {
             echo json_encode($this->body);
         } catch (Exception $e) {
-            // rethrow a Sins exception
+            // rethrow a Scherzo exception
             throw $e;
         } catch (\Exception $e) {
-            // convert an ordinary exception into a Sins exception
+            // convert an ordinary exception into a Scherzo exception
             throw new Exception($e->getMessage, array(), $e);
         }
     }
@@ -336,23 +385,53 @@ class Response
 class Route
 {
 
-    public function __construct(Request $request, Core $app)
+    protected $app;
+    protected $request;
+
+    public function __construct(Container $app)
     {
         $this->app = $app;
+    }
+
+    public function parse(Request $request)
+    {
         $this->request = $request;
+        $this->controller = null;
+        $this->id = null;
+        $this->extra = array();
+        $request->route = $this;
+        return $this; // chainable
     }
 
     public function dispatch(Response $response)
     {
-        $controller = 'Sins\Controller';
+        $ns = 'Sins';
         $controller = null;
-        if (empty($controller)) {
-            $controller = 'Sins\Controller\DefaultController';
-        } elseif (!class_exists($controller)) {
-            $controller = 'Sins\Controller\ErrorController';
+
+        if ($controller === null) {
+            // try the application's default controller
+            $class = "$ns\\Controller\\DefaultController";
+        } else {
+            // try the specified application controller
+            $class = "$ns\\Controller\\Controller_$controller";
+        }
+        if (!class_exists($class)) {
+            if ($controller === null) {
+                // the default controller was requested but the application
+                // doesn't have one so use the default default
+                $class = __NAMESPACE__ . '\Controller\DefaultController';
+            } else {
+                // the specified controller doesn't exist
+                throw new Exception(
+                    'The specified controller :name doesn\'t exist',
+                    array(':name' => $controller),
+                    404
+                );
+            }
         }
         // create the controller and invoke it
-        (new $controller($this->request, $response, $this->app))->invoke();
+        (new $class($this->request, $response, $this->app))->invoke();
+        return $this; // chainable
     }
 
 } // end class Route

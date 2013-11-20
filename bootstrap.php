@@ -12,6 +12,8 @@
  * @license    [MIT](http://opensource.org/licenses/MIT)
 **/
 
+namespace SinsScherzo;
+
 // the class file must already have been included
 $local = new \Sins\Local;
 
@@ -26,44 +28,46 @@ if (isset($startTime)) {
 // set the directory containing Sins
 $local->baseDir = __DIR__ . DIRECTORY_SEPARATOR;
 
-// try and autoload the core class
-if (class_exists('\Sins\Core')) {
-    $app = new \Sins\Core($local);
+
+// try and autoload the core class - if you want to override the core, do it here
+if (class_exists('\SinsScherzo\Core')) {
+    $core = new Core($local);
 } else{
     // we have no autoloader so we will have to load it manually
-    require __DIR__ . '/classes/Sins/Core.php';
+    require __DIR__ . '/classes/SinsScherzo/Core.php';
     // and register our own autoloader
-    $app = new \Sins\Core($local);
-    $app->registerClassAutoloader();
+    $core = new Core($local);
+    $core->registerClassAutoloader();
 }
+
+$app = $core->bootstrap();
 
 try {
 
     // Create a request object and populate it from the HTTP request.
-    $request = new \Sins\Request($app);
+    $request = new Request($app);
     $request->parseHttp();
 
     // create a response object
-    $response = new \Sins\Response($request, $app);
+    $response = new Response($request, $app);
 
     // create a route and dispatch it
-    (new \Sins\Route($request, $app))->dispatch($response);
+    (new Route($app))->parse($request)->dispatch($response);
 
     $response->send();
 
     return;
 
-} catch (\Sins\Exception $e) {
-    
+} catch (Exception $e) {
+    // let a Scherzo\Exception fall through    
 
 } catch (\Exception $ee) {
-    $e = new \Sins\Exception($ee->getMessage(), array(), 500, $ee);
+    // turn an ordinary Exception into a Scherzo\Exception
+    $e = new Exception($ee->getMessage(), array(), 500, $ee);
 }
 
+// throw the Scherzo\Exception
 throw $e;
-
-echo ('never gets here');
-die;
 
 
 // just an example follows
