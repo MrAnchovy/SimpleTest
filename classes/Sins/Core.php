@@ -1,8 +1,8 @@
 <?php
 /**
- * This is the core class for Sins.
+ * These are the core classes for Sins.
  *
- * It includes  is supplied with settings that should work "out of the box", but you will
+ * This file includes the following classeIt includes  is supplied with settings that should work "out of the box", but you will
  * want to change these - see the documentation for more information.
  *
  * @package    Sins
@@ -25,14 +25,29 @@ class Core
     **/
     public function __construct($local) {
         $this->local = $local;
+        $this->bootstrapTimezone();
         $this->bootstrapExceptions();
-        $this->request = new Request;
     }
 
     /**
+     * Deal with unset default timezone.
+    **/
+    protected function bootstrapTimezone()
+    {
+        if (isset($this->local->timezone)) {
+            // if it is set explicitly, use it
+            date_default_set($this->local->timezone);
+        } else {
+            // date.timezone is the only other way to set it in PHP >= 5.4.0
+            if (!ini_get('date.timezone')) {
+                date_default_timezone_set('UTC');
+            }
+        }
+    }
+    /**
      * Set up error and exception handling.
     **/
-    public function bootstrapExceptions() {
+    protected function bootstrapExceptions() {
         Exception::$app = $this;
         set_exception_handler(array($this, 'exceptionHandler'));
         error_reporting(-1);
@@ -41,12 +56,10 @@ class Core
         // throw new \Exception('oops'); // test
     }
 
-
-
     /**
      * SPL class loader.
     **/
-    function classAutoloader($className)
+    public function classAutoloader($className)
     {
         $className = ltrim($className, '\\');
         $fileName  = $this->classDir;
@@ -66,7 +79,7 @@ class Core
     /**
      * Exception handler.
     **/
-    function exceptionHandler(\Exception $e)
+    public function exceptionHandler(\Exception $e)
     {
         // rethrow as \Namespace\Exception
         throw new Exception($e);
@@ -81,10 +94,34 @@ class Core
         spl_autoload_register(array($this, 'classAutoloader'));
     }
 
-}
+} // end class Core
+
+
+class Controller
+{
+    protected $app;
+    protected $request;
+    protected $response;
+
+    public function __construct(Request $request, Response $response, Core $app)
+    {
+        $this->request = $request;
+        $this->response = $response;
+        $this->app = $app;
+    }
+
+    public function invoke()
+    {
+        $this->response->body = 'Hi there';
+    }
+} // end class Controller
 
 class Exception extends \Exception
 {
+    /**
+     * Because of the way exceptions are thrown this is the only effective way
+     * to inject dependencies.
+    **/
     public static $app;
 
     public function __construct($message = null, $vars = array(), $status = 500, $previous = null)
@@ -107,52 +144,215 @@ class Exception extends \Exception
         }
     }
 
-}
+} // end class Exception
 
 class Request
 {
-    public $headers = array();
-    public $body;
-    public $params = array();
-    public $query;
+    protected $app;
+    public $path;
+    protected $body;
+    protected $params = array();
+    protected $query = array();
 
-    public function __construct()
+    public function __construct(Core $app)
     {
-        $this->parseRequest();
+        $this->app = $app;
+        $this->path = isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : null;
     }
-    public function parseRequest()
+
+    public function getHeader($name, $default = null)
+    {
+        $name = 'HTTP_' . str_replace('-', '_', strtoupper($name));
+        if (isset($_SERVER[$name])) {
+            return $_SERVER[$name];
+        } else {
+            return $default;
+        }
+    }
+
+    public function getBody()
+    {
+    }
+
+    public function getParam($name = null, $default = null)
+    {
+        if (array_key_exists($this->params, $name)) {
+            return $this->params[$name];
+        } else {
+            return $default;
+        }
+    }
+
+    public function getQuery($name = null, $default = null)
+    {
+        if (array_key_exists($this->query, $name)) {
+            return $this->query[$name];
+        } else {
+            return $default;
+        }
+    }
+
+    public function parseHttp()
     {
         try {
             $this->method = $_SERVER['REQUEST_METHOD'];
             if ($this->method === 'GET') {
                 $this->params = $_GET;
-            } elseif ($this->method === 'GET') {
+            } else {
+                $this->params = $_POST;
+                $this->query = $_GET;
             }
         } catch (\Exception $e) {
             // invalid request!
             throw new Exception('Bad Request', array(), 400, $e);
         }
     }
-}
+} // end class Request
 
 class Response
 {
-    public $status;
+
+    /**
+     * The response body. If this is an array it is converted according to the
+     * content type.
+    **/
     public $body;
-    public function __construct()
-    {
-    }
+
+    /**
+     * Content type.
+    **/
+    public $contentType = 'html';
+
+    /**
+     * Array of headers to be sent. Do NOT set the content type here, it will
+     * be overwritten.
+    **/
+
+    public $headers = array();
+    /**
+     * HTTP status code or message. If this is a string it is sent unamended,
+     * otherwise it should be an integer and the correct status line is created.
+    **/
+    public $status;
+
+    /**
+     * Supported content types.
+    **/
+    protected $contentTypes = array(
+        'html' => 'text/html',
+        'json' => 'application/json',
+        'text' => 'text/plain',
+        'xml'  => 'application/xml',
+    );
+
+    /**
+     * Supported HTTP status codes.
+    **/
+    protected $statusCodes = array(
+        200 => 'OK',
+        201 => 'Created',    // for API use when something has been created
+        202 => 'Accepted',   // for API use when something has been queued
+        301 => 'Moved Permanently',
+        303 => 'See Other',  // use to redirect following a <form> post
+        307 => 'Temporary Redirect',
+        400 => 'Bad Request',
+        403 => 'Forbidden',
+        429 => 'Too Many Requests', // use to throttle a user
+        404 => 'Not Found',
+        500 => 'Internal Server Error',
+        503 => 'Service Unavailable', // use when busy
+    );
+
+    /**
+     *
+    **/
     public function send()
     {
-        foreach($this->headers as $name => $value) {
-            if (is_array($value)) {
-                foreach($value as $v) {
-                    header("name: $value;");
+        try {
+            if (is_int($this->status)) {
+                if (isset($this->statusCodes[$this->status])) {
+                    $status = "$this->status $this->statusCodes[$this->status]";
+                } else {
+                    throw new Exception(
+                        'Status code [:code] not supported',
+                        array(':code' => $this->status)
+                    );
                 }
             } else {
-                header("$name: $value;");
+                $status = $this->status;
             }
+            header("HTTP/1.1 $status");
+            $contentType = $this->contentTypes[$this->contentType];
+            header("Content-Type: $contentType");
+            // send the other headers
+            foreach($this->headers as $name => $value) {
+                if (is_array($value)) {
+                    foreach($value as $v) {
+                        header("name: $value;");
+                    }
+                } else {
+                    header("$name: $value;");
+                }
+            }
+            // now send the body
+            $method = "send_$this->contentType";
+            $this->$method();
+        } catch (Exception $e) {
+            // rethrow a Sins exception
+            throw $e;
+        } catch (\Exception $e) {
+            // convert an ordinary exception into a Sins exception
+            throw new Exception($e->getMessage, array(), $e);
         }
+    }
+
+    /**
+     * Send an html body.
+    **/
+    protected function send_html()
+    {
         echo $this->body;
     }
-}
+
+    /**
+     * Send a json body.
+    **/
+    protected function send_json()
+    {
+        try {
+            echo json_encode($this->body);
+        } catch (Exception $e) {
+            // rethrow a Sins exception
+            throw $e;
+        } catch (\Exception $e) {
+            // convert an ordinary exception into a Sins exception
+            throw new Exception($e->getMessage, array(), $e);
+        }
+    }
+
+} // end class Response
+
+
+class Route
+{
+
+    public function __construct(Request $request, Core $app)
+    {
+        $this->app = $app;
+        $this->request = $request;
+    }
+
+    public function dispatch(Response $response)
+    {
+        $controller = 'Sins\Controller';
+        $controller = null;
+        if (empty($controller)) {
+            $controller = 'Sins\Controller\DefaultController';
+        } elseif (!class_exists($controller)) {
+            $controller = 'Sins\Controller\ErrorController';
+        }
+        // create the controller and invoke it
+        (new $controller($this->request, $response, $this->app))->invoke();
+    }
+
+} // end class Route

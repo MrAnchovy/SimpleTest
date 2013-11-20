@@ -333,7 +333,7 @@ class JsonReporter
         );
 
         // send it
-        if (false) {
+        if (true) {
             header('Content-Type: application/json');
             echo json_encode($this->data);
         } else {

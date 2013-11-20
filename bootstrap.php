@@ -37,6 +37,35 @@ if (class_exists('\Sins\Core')) {
     $app->registerClassAutoloader();
 }
 
+try {
+
+    // Create a request object and populate it from the HTTP request.
+    $request = new \Sins\Request($app);
+    $request->parseHttp();
+
+    // create a response object
+    $response = new \Sins\Response($request, $app);
+
+    // create a route and dispatch it
+    (new \Sins\Route($request, $app))->dispatch($response);
+
+    $response->send();
+
+    return;
+
+} catch (\Sins\Exception $e) {
+    
+
+} catch (\Exception $ee) {
+    $e = new \Sins\Exception($ee->getMessage(), array(), 500, $ee);
+}
+
+throw $e;
+
+echo ('never gets here');
+die;
+
+
 // just an example follows
 
 $useAutorun = false;
