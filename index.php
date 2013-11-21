@@ -11,11 +11,16 @@
  * @license    [MIT](http://opensource.org/licenses/MIT)
 **/
 
+// We don't want to see anything nasty (set this to 1 to find out what is wrong
+// if you are getting a blank screen).
+ini_set('display_errors', 0);
+
 // Save the time so we can monitor performance.
 $startTime = microtime(true);
 
-// include the file containing local settings
+// include the file containing local settings and create the $local object
 include __DIR__ . '/sins-local-default.php';
+$local = new \Sins\Local;
 
 // include the bootstrap file
 include __DIR__ . '/bootstrap.php';

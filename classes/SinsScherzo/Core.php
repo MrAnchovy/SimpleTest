@@ -6,6 +6,7 @@
  *   * Core
  *   * Controller
  *   * Exception
+ *   * JsonEncoder
  *   * Request
  *   * Response
  *   * Route
@@ -24,6 +25,9 @@ class Core
 
     protected $classDir;
     protected $local;
+    protected $app;
+    public $request;
+    public $response;
 
     /**
      * Constructor.
@@ -36,23 +40,23 @@ class Core
      * Bootstrap the core.
     **/
     public function bootstrap() {
-        $app = new Container;
-        $app->share('local', $this->local);
-        $this->bootstrapTimezone($app);
-        $this->bootstrapExceptions($app);
-        return $app;
+        $this->app = new Container;
+        $this->app->share('local', $this->local);
+        // do this first otherwise timestamping in any shutdown log may fail
+        $this->bootstrapTimezone($this->app);
+        $this->bootstrapExceptions($this->app);
+        return $this->app;
     }
 
     /**
      * Set up error and exception handling.
     **/
     protected function bootstrapExceptions($app) {
-        Exception::$app = $app;
-        set_exception_handler(array($this, 'exceptionHandler'));
         error_reporting(-1);
-        // ini_set('display_errors', 0);
-        ini_set('display_errors', 1);
-        // throw new \Exception('oops'); // test
+        // REVISIT there is probably a best order to do these in
+        set_exception_handler(array($this, 'exceptionHandler'));
+        set_error_handler(array($this, 'errorHandler'), -1);      // handle all errors
+        register_shutdown_function(array($this, 'shutdownHandler'));
     }
 
     /**
@@ -92,12 +96,29 @@ class Core
     }
 
     /**
+     * Error handler.
+    **/
+    public function errorHandler()
+    {
+        // rethrow as \Namespace\Exception
+        $e = new Exception();
+        $e->fromError(func_get_args());
+        throw $e;
+    }
+
+    /**
      * Exception handler.
     **/
     public function exceptionHandler(\Exception $e)
     {
-        // rethrow as \Namespace\Exception
-        throw new Exception($e);
+        try {
+            $controller = new ErrorController($this->app, $this->request, $this->response);
+            $controller->setException($e);
+            $controller->invoke();
+            $this->response->send();
+        } catch (\Exception $e) {
+            echo 'Error in exception handler'. print_r($e);
+        }
     }
 
     /**
@@ -109,8 +130,38 @@ class Core
         spl_autoload_register(array($this, 'classAutoloader'));
     }
 
-} // end class Core
+    /**
+     * Shutdown handler.
+    **/
+    public function shutdownHandler()
+    {
+        if ($error = error_get_last()) {
+            $e = new Exception();
+            $e->fromLastError($error);
+            $this->exceptionHandler($e);
+        }
 
+        flush();
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+    }
+
+    /**
+     * Shutdown handler.
+    **/
+    public function shutdown()
+    {
+        flush();
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+        // do lengthy stuff here
+    }
+
+//        Kohana::exception_handler(new ErrorException($error['message'], $error['type'], 0, $error['file'], $error['line']));
+
+} // end class Core
 
 class Container
 {
@@ -160,11 +211,11 @@ abstract class Controller
     protected $request;
     protected $response;
 
-    public function __construct(Request $request, Response $response, Container $app)
+    public function __construct(Container $app = null, Request $request = null, Response $response = null)
     {
+        $this->app = $app;
         $this->request = $request;
         $this->response = $response;
-        $this->app = $app;
     }
 
     public function invoke()
@@ -172,50 +223,190 @@ abstract class Controller
     }
 } // end class Controller
 
-class Exception extends \Exception
+
+/**
+ * Decode from json with options and error handling.
+**/
+class JsonDecoder
 {
     /**
-     * Because of the way exceptions are thrown this is the only effective way
-     * to inject dependencies.
+     * Decodes json hashes to associative arrays (rather than objects).
     **/
-    public static $app;
+    public $assoc = true;
 
-    public function __construct($message = null, $vars = array(), $status = 500, $previous = null)
+    /**
+     * Array of default options for json_decode - these have PHP constant names
+     * as keys, although only JSON_BIGINT_AS_STRING is implemented in 2013.
+    **/
+    protected $defaults = array(
+        'JSON_BIGINT_AS_STRING' => true,
+    );
+
+    /**
+     * Depth parameter for json_decode - this must be set to a value because
+     * of the ordering of arguments in json_decode().
+    **/
+    public $depth = 512;
+
+    /**
+     * Array of options for json_decode - see $defaults.
+    **/
+    public $options = array();
+
+    /**
+     * If true, options that don't exist throw an exception, otherwise they are ignored.
+    **/
+    public $strict = false;
+
+    /**
+     * Decode from json with options and error handling.
+    **/
+    public function decode($body)
     {
-        try {
-            $message = strtr($message, $vars);
-        } catch (\Exception $ee) {
-            $message = $ee->getMessage() . " after $message";
-            $status = 500;
+        $bitmask = 0;
+        $settings = array_merge($this->defaults, $this->options);
+        foreach ($settings as $option => $value) {
+            if ($value && defined($option)) {
+                $bitmask = $bitmask | constant($option);
+            } elseif ($value && $this->strict) {
+                throw new Exception(
+                    'Constant :const not available in PHP :ver',
+                    array(':const' => $option, ':ver' => phpversion())
+                );
+            }
         }
-        parent::__construct($message, 0, $previous);
-        if (isset(self::$app) && isset(self::$app->response)) {
-            self::$app->response->body = $this->getMessage();
-            self::$app->response->status = $status;
-            self::$app->response->send();
-        } else {
-            header("HTTP/1.1 $status");
-            header("Content-Type: text/plain");
-            echo $this->getMessage();
+        $decoded = json_decode($body, $this->assoc, $this->depth, $bitmask);
+        if (json_last_error === JSON_ERROR_NONE) {
+            return $decoded;
         }
+        throw new Exception(
+            'Json decoding error. :msg',
+            array(':msg' => json_last_error()),
+            400 // this is a bad request error
+        );
     }
+}
 
-} // end class Exception
+class JsonEncoder
+{
+    /**
+     * Array of default options for json_encode - these have PHP constant names
+     * as keys - some examples shown below (these two are useful for displaying
+     * JSON as HTML).
+    **/
+    protected $defaults = array(
+        // 'JSON_PRETTY_PRINT' => true,
+        // 'JSON_HEX_TAG'      => true,
+    );
 
+    /**
+     * Depth parameter for json_encode.
+    **/
+    public $depth = null;
+
+    /**
+     * Array of options for json_encode - see $defaults.
+    **/
+    public $options = array();
+
+    /**
+     * If true, options that don't exist throw an exception, otherwise they are ignored.
+    **/
+    public $strict = false;
+
+    /**
+     * Encode into json with options and error handling.
+    **/
+    public function encode($body)
+    {
+        $bitmask = 0;
+        $settings = array_merge($this->defaults, $this->options);
+        foreach ($settings as $option => $value) {
+            if ($value && defined($option)) {
+                $bitmask = $bitmask | constant($option);
+            } elseif ($value && $this->strict) {
+                throw new Exception(
+                    'Constant :const not available in PHP :ver',
+                    array(':const' => $option, ':ver' => phpversion())
+                );
+            }
+        }
+        
+        // get the encoded string
+        if ($this->depth === null) {
+            $encoded = json_encode($body, $bitmask);
+        } else {
+            $encoded = json_encode($body, $bitmask, $this->depth);
+        }
+
+        // if there was no error return the encoded string
+        if (json_last_error === JSON_ERROR_NONE) {
+            return $encoded;
+        }
+        
+        // fail if there was an error
+        throw new Exception(
+            'Json encoding error. :msg',
+            array(':msg' => json_last_error())
+        );
+    }
+}
+
+
+
+
+/**
+ * HTTP request handling.
+ *
+ * The request is mainly dealt with by lazy-loading to avoid redundant processing.
+**/
 class Request
 {
-    protected $app;
-    public $path;
-    public $route;
-    protected $body;
-    protected $params = array();
-    protected $query = array();
 
-    public function __construct(Container $app)
+    /**
+     * Request parameters.
+    **/
+    public $params = array();
+    public $path;
+    public $query  = array();
+    public $route;
+
+    /**
+     * Constructor - inject the request into the core so it can be used by shutdown
+     * and error handlers.
+    **/
+    public function __construct(Core $app)
     {
-        $this->app = $app;
+        $app->request = $this;
     }
 
+    /**
+     * Get the request body.
+     *
+     * The stream
+     *
+     * @TODO            Treat it as a stream and stop reading after a while to guard
+     *                  against DOS
+     * @return  string  The request body (for content types other than
+     *                  multipart/form-data).
+    **/
+    public function getBody()
+    {
+        static $body;
+        if ($body === null) {
+            $body = file_get_contents('php://input');
+        }
+        return $body;
+    }
+
+    /**
+     * Get a request body.
+     *
+     * @TODO            Treat it as a stream and stop reading after a while to guard
+     *                  against DOS
+     * @return  string  The request body (for content types other than
+     *                  multipart/form-data).
+    **/
     public function getHeader($name, $default = null)
     {
         $name = 'HTTP_' . str_replace('-', '_', strtoupper($name));
@@ -226,18 +417,22 @@ class Request
         }
     }
 
-    public function getBody()
-    {
-    }
-
     public function getParam($name = null, $default = null)
     {
-        return array_key_exists($this->params, $name) ? $this->params[$name] : $default;
+        if ($name === null) {
+            return $this->params;
+        } else {
+            return array_key_exists($this->params, $name) ? $this->params[$name] : $default;
+        }
     }
 
     public function getQuery($name = null, $default = null)
     {
-        return array_key_exists($this->query, $name) ? $this->query[$name] : $default;
+        if ($name === null) {
+            return $this->query;
+        } else {
+            return array_key_exists($this->query, $name) ? $this->query[$name] : $default;
+        }
     }
 
     public function parseHttp()
@@ -256,6 +451,19 @@ class Request
             throw new Exception('Bad Request', array(), 400, $e);
         }
     }
+
+    protected function parseJson()
+    {
+        $decoder = new JsonDecoder;
+        $decoder->assoc = true; // we want an array
+        $decoded = $decoder->decode($this->getBody());
+        if (is_array($decoded)) {
+            $this->params = $decoded;
+        } else {
+            $this->params = array();
+        }
+    }
+
 } // end class Request
 
 class Response
@@ -276,8 +484,8 @@ class Response
      * Array of headers to be sent. Do NOT set the content type here, it will
      * be overwritten.
     **/
-
     public $headers = array();
+
     /**
      * HTTP status code or message. If this is a string it is sent unamended,
      * otherwise it should be an integer and the correct status line is created.
@@ -288,10 +496,13 @@ class Response
      * Supported content types.
     **/
     protected $contentTypes = array(
-        'html' => 'text/html',
-        'json' => 'application/json',
-        'text' => 'text/plain',
-        'xml'  => 'application/xml',
+        'html'      => 'text/html',
+        'json'      => 'application/json',
+        'jsonText'  => 'text/plain',        // used to return formatted json to a non-api request
+        'text'      => 'text/plain',
+        'xml'       => 'application/xml',
+        'xmlText'   => 'text/plain',        // used to return formatted xml to a non-api request
+        'yaml'      => 'text/plain',
     );
 
     /**
@@ -313,45 +524,57 @@ class Response
     );
 
     /**
-     *
+     * Constructor - inject the response into the core so it can be used by shutdown
+     * and error handlers.
+    **/
+    public function __construct(Core $app)
+    {
+        $app->response = $this;
+    }
+
+    /**
+     * Send this response.
     **/
     public function send()
     {
-        try {
-            if (is_int($this->status)) {
-                if (isset($this->statusCodes[$this->status])) {
-                    $status = "$this->status $this->statusCodes[$this->status]";
-                } else {
-                    throw new Exception(
-                        'Status code [:code] not supported',
-                        array(':code' => $this->status)
-                    );
+        if (is_int($this->status)) {
+            if (isset($this->statusCodes[$this->status])) {
+                $status = "$this->status {$this->statusCodes[$this->status]}";
+            } else {
+                throw new Exception(
+                    'Status code [:code] not supported',
+                    array(':code' => $this->status)
+                );
+            }
+        } else {
+            $status = $this->status;
+        }
+        $this->sendHeader("HTTP/1.1 $status");
+        $this->sendHeader('Content-Type', $this->contentTypes[$this->contentType]);
+        // send the other headers
+        foreach($this->headers as $name => $value) {
+            if (is_array($value)) {
+                foreach($value as $v) {
+                    $this->sendHeader($name, $v);
                 }
             } else {
-                $status = $this->status;
+                $this->sendHeader($name, $value);
             }
-            header("HTTP/1.1 $status");
-            $contentType = $this->contentTypes[$this->contentType];
-            header("Content-Type: $contentType");
-            // send the other headers
-            foreach($this->headers as $name => $value) {
-                if (is_array($value)) {
-                    foreach($value as $v) {
-                        header("name: $value;");
-                    }
-                } else {
-                    header("$name: $value;");
-                }
-            }
-            // now send the body
-            $method = "send_$this->contentType";
-            $this->$method();
-        } catch (Exception $e) {
-            // rethrow a Scherzo exception
-            throw $e;
-        } catch (\Exception $e) {
-            // convert an ordinary exception into a Scherzo exception
-            throw new Exception($e->getMessage, array(), $e);
+        }
+        // now send the body
+        $method = "send_$this->contentType";
+        $this->$method();
+    }
+
+    /**
+     * Send an HTTP header: you can override this to create a mock object for testing.
+    **/
+    protected function sendHeader($name, $value = null)
+    {
+        if ($value === null) {
+            header($name);
+        } else {
+            header("$name: $value");
         }
     }
 
@@ -368,19 +591,21 @@ class Response
     **/
     protected function send_json()
     {
-        try {
-            echo json_encode($this->body);
-        } catch (Exception $e) {
-            // rethrow a Scherzo exception
-            throw $e;
-        } catch (\Exception $e) {
-            // convert an ordinary exception into a Scherzo exception
-            throw new Exception($e->getMessage, array(), $e);
-        }
+        $encoder = new JsonEncoder;
+        echo (new JsonEncoder)->encode($this->body);
+    }
+
+    /**
+     * Send a json body formatted for a non-api (i.e. browser) request.
+    **/
+    protected function send_jsonText()
+    {
+        $encoder = new JsonEncoder;
+        $encoder->options = array('JSON_PRETTY_PRINT');
+        echo $encoder->encode($this->body);
     }
 
 } // end class Response
-
 
 class Route
 {
@@ -430,7 +655,7 @@ class Route
             }
         }
         // create the controller and invoke it
-        (new $class($this->request, $response, $this->app))->invoke();
+        (new $class($this->app, $this->request, $response))->invoke();
         return $this; // chainable
     }
 
