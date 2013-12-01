@@ -13,9 +13,6 @@
 
 namespace Sins;
 
-class Local
+class Local extends \Sins\DefaultLocal
 {
-    // these properties are set in bootstrap.php so do not set them here
-    public $baseDir;
-    public $startTime;
 }

@@ -12,7 +12,7 @@
  * @license    [MIT](http://opensource.org/licenses/MIT)
 **/
 
-namespace SinsScherzo;
+namespace Sins;
 
 if (!isset($local)) {
     // if there is no $local we can't do anything, but we shouldn't have got here anyway
@@ -34,18 +34,10 @@ try {
     // set the directory containing Sins
     $local->baseDir = __DIR__ . DIRECTORY_SEPARATOR;
 
-    // try and autoload the core class - if you want to override the core, do it here
-    if (class_exists('\SinsScherzo\Core')) {
-        $core = new Core($local);
-    } else {
-        // we have no autoloader so we will have to load it manually
-        include __DIR__ . '/classes/SinsScherzo/Core.php';
-        // and register our own autoloader
-        $core = new Core($local);
-        $core->registerClassAutoloader();
-    }
+    include __DIR__ . '/classes/Sins/Core.php';
+    $core = new Core($local);
 
-    $app = $core->bootstrap();
+    $core->bootstrap();
 
 } catch (\Exception $e) {
     // if we get here we cannot handle exceptions normally so this is all we can do
@@ -62,23 +54,22 @@ try {
 
 // that's the end of the bootstrapping, now we can get on with the request
 
-// Create a request object and populate it from the HTTP request.
-$request = new Request($core);
+// Create a request object.
+$request = new Request();
 
-// Create a response object of the right type - we do this now so it can be used
-// to report any errors in parsing the request.
-$response = new Response($core);
+// Inject it into the core so it can be used by error handling, logging.
+// $app->share('request', $request);
 
-// Parse the request
-$request->parseHttp();
+// Create the front controller, passing the dependencies, and execute it.
+$response = (new FrontController($request))->getResponse();
 
-// create a route and dispatch it
-(new Route($app))->parse($request)->dispatch($response);
+// Inject it into the core so it can be used by error handling, logging.
+// $app->share('response', $response);
 
 // send the response
 $response->send();
 
 // and we are done
-$core->shutdown();
+// $core->shutdown();
 
 return;
