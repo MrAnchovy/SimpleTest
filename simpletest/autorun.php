@@ -15,6 +15,11 @@ require_once dirname(__FILE__) . '/collector.php';
 require_once dirname(__FILE__) . '/default_reporter.php';
 /**#@-*/
 
+// allow legacy simpletest files to run inside Sins
+if (defined('SIMPLETEST_NO_AUTORUN') && SIMPLETEST_NO_AUTORUN === true) {
+    return;
+}
+
 $GLOBALS['SIMPLETEST_AUTORUNNER_INITIAL_CLASSES'] = get_declared_classes();
 $GLOBALS['SIMPLETEST_AUTORUNNER_INITIAL_PATH'] = getcwd();
 register_shutdown_function('simpletest_autorun');

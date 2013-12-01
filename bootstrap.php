@@ -61,7 +61,7 @@ $request = new Request();
 // $app->share('request', $request);
 
 // Create the front controller, passing the dependencies, and execute it.
-$response = (new FrontController($request))->getResponse();
+$response = (new FrontController($local, $request))->getResponse();
 
 // Inject it into the core so it can be used by error handling, logging.
 // $app->share('response', $response);

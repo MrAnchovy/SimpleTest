@@ -96,8 +96,9 @@ abstract class Controller
     protected $request;
     protected $response;
 
-    public function __construct(Request $request = null, Response $response = null)
+    public function __construct(Local $local = null, Request $request = null, Response $response = null)
     {
+        $this->local = $local;
         $this->request = $request;
         $this->response = $response;
     }
@@ -162,10 +163,10 @@ class FrontController extends Controller
     protected $id;
     protected $type;
 
-    public function __construct(Request $request = null, Response $response = null)
+    public function __construct(Local $local = null, Request $request = null, Response $response = null)
     {
         // No response is passed to the front controller
-        parent::__construct($request);
+        parent::__construct($local, $request);
         $this->parseRequest();
     }
 
@@ -195,7 +196,7 @@ class FrontController extends Controller
         }
 
         if ($ok) {
-            $controller = new $controllerClass($this->request, $this->response);
+            $controller = new $controllerClass($this->local, $this->request, $this->response);
             $controller->execute($this->type, $this->action, $this->id);
             return $this->response;
         } else {
@@ -422,6 +423,19 @@ class HttpResponse extends Response
     **/
     public function send()
     {
+        if (!headers_sent()) {
+            $this->sendHeaders();
+        }
+        // now send the body
+        $method = "send_$this->type";
+        $this->$method();
+    }
+
+    /**
+     * Send the headers.
+    **/
+    protected function sendHeaders()
+    {
         if (is_int($this->status)) {
             if (isset($this->statusCodes[$this->status])) {
                 $status = "$this->status {$this->statusCodes[$this->status]}";
@@ -446,9 +460,6 @@ class HttpResponse extends Response
                 $this->sendHeader($name, $value);
             }
         }
-        // now send the body
-        $method = "send_$this->type";
-        $this->$method();
     }
 
     /**

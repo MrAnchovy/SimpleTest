@@ -200,7 +200,7 @@ class ExpectationTestCase extends \SimpleTestCase {
         }
         $trace = $this->getTrace();
         if (is_array($trace) && count($trace) === 3) {
-            $details['trace'] = $trace[1];
+            $details['file'] = $trace[1];
             $details['line'] = $trace[2];
         }
 
@@ -220,7 +220,7 @@ class ExpectationTestCase extends \SimpleTestCase {
         }
         $trace = $this->getTrace();
         if (is_array($trace) && count($trace) === 3) {
-            $details['trace'] = $trace[1];
+            $details['file'] = $trace[1];
             $details['line'] = $trace[2];
         }
 
