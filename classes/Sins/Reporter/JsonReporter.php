@@ -18,10 +18,15 @@ class JsonReporter
     public $outputArray;
 
     /**
+     * Set to false before running the reporter to hide passes.
+    **/
+    public $showPasses = true;
+
+    /**
      * Setting for formatting timestamps - either a date() format string or a
      * DateTimezone constant name.
     **/
-    protected $timeFormat = 'ISO8601';
+    public $timeFormat = 'ISO8601';
 
     /**
      * Title of current file, class and method.
@@ -267,7 +272,9 @@ class JsonReporter
     public function paintPass($message)
     {
         $this->increment('pass');
-        $this->reportTest('Pass', $message);
+        if ($this->showPasses) {
+            $this->reportTest('Pass', $message);
+        }
     }
 
     /**
