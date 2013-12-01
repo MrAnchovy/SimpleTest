@@ -9,13 +9,17 @@
 
 namespace Sins\Reporter;
 
-// class JsonReporter extends \SimpleReporter
 class JsonReporter
 {
+    /**
+     * Set to true before running the reporter to prevent direct output of json,
+     * in which case the output will be stored as an array here.
+    **/
+    public $outputArray;
 
     /**
      * Setting for formatting timestamps - either a date() format string or a
-     * DateTimezone constant name.00
+     * DateTimezone constant name.
     **/
     protected $timeFormat = 'ISO8601';
 
@@ -333,12 +337,11 @@ class JsonReporter
         );
 
         // send it
-        if (true) {
+        if ($this->outputArray) {
+            $this->outputArray = $this->data;
+        } else {
             header('Content-Type: application/json');
             echo json_encode($this->data);
-        } else {
-            header('Content-Type: text/plain');
-            echo json_encode($message, JSON_PRETTY_PRINT);
         }
     }
 
@@ -380,7 +383,7 @@ class JsonReporter
         unset($group['time']);
 
         // report the event
-        $group['type'] = 'GroupStart';
+        $group = array_merge(array('type' => 'GroupStart'), $group);
         $this->reportEvent($group);
     }
 
@@ -419,7 +422,7 @@ class JsonReporter
         }
 
         // report the event
-        $group['type'] = 'GroupEnd';
+        $group = array_merge(array('type' => 'GroupEnd'), $group);
         $this->reportEvent($group);
     }
 
@@ -438,7 +441,7 @@ class JsonReporter
                 array(
                     'type' => 'test',
                     'result' => $type,
-                    'time' => microtime(true) - $this->lastEventTime,
+                    'time' => round(microtime(true) - $this->lastEventTime, 6),
                 ),
                 $message,
                 $this->current
