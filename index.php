@@ -25,6 +25,7 @@ class DefaultLocal {
     public $baseDir;
     public $startTime;
     public $runmode = 'development';
+    public $assetsPath ='assets/';
 }
 
 // include the file containing local settings and create the $local object

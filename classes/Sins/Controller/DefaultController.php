@@ -5,7 +5,10 @@ namespace Sins\Controller;
 class DefaultController extends \Sins\Controller {
 
     function executeGetIndex() {
-        $this->response->body = 'This is the Index Page for the default controller; it should be overriden by your application.';
+        $page = new \Sins\PhpView;
+        $page->assetsPath = $this->local->assetsPath;
+        $page->setTemplate(__DIR__.'/../../../templates/Sins/sins-page.tpl.php');
+        $this->response->body = $page->render();
     }
 
 }
