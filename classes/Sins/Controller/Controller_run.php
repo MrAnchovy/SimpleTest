@@ -11,28 +11,10 @@ namespace Sins\Controller;
 
 class Controller_run extends \Sins\Controller {
 
-    function executeApiAction_autorun($id = null) {
-        $this->autorun(__DIR__ . '/../../../simpletest/test/dumper_test.php');
-    }
-
-    function autorun($files) {
-        $autorun = new \Sins\Autorun;
-        $reporter = new \Sins\Reporter\JsonReporter;
-        $reporter->outputArray = true;
-        $autorun->reporter = $reporter;
-        $autorun->start();
-        if (is_array($files)) {
-            foreach ($files as $file) {
-                include $file;
-            }
-        } else {
-            include $files;
-        }
-        $autorun->finish();
-        return $reporter->outputArray;
-    }
-
-    function executeApi($id = null) {
+    /**
+     * Implement /run.json, /run/[id].json
+    **/
+    public function executeApi($id = null) {
 
         $this->response->body = array(
             'status' => 'ok',
@@ -68,4 +50,31 @@ class Controller_run extends \Sins\Controller {
             'testResult' => $reporter->outputArray,
         );
     }
+
+    /**
+     * Implement /run/[id]/autorun.json.
+    **/
+    function executeApiAction_autorun($id = null) {
+        $this->autorun(__DIR__ . '/../../../simpletest/test/dumper_test.php');
+    }
+
+
+    protected function autorun($files) {
+        $autorun = new \Sins\Autorun;
+        $reporter = new \Sins\Reporter\JsonReporter;
+        $reporter->outputArray = true;
+        $autorun->reporter = $reporter;
+        $autorun->start();
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                include $file;
+            }
+        } else {
+            include $files;
+        }
+        $autorun->finish();
+        return $reporter->outputArray;
+    }
+
+
 }

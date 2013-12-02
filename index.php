@@ -25,7 +25,16 @@ class DefaultLocal {
     public $baseDir;
     public $startTime;
     public $runmode = 'development';
-    public $assetsPath ='assets/';
+    public $assetsUrl = 'assets/';
+    public $baseUrl;
+    public $apiUrl;
+
+    public function __construct()
+    {
+        $this->baseUrl = $_SERVER['REQUEST_URI'];
+        $this->apiUrl = $_SERVER['REQUEST_URI'];
+    }
+
 }
 
 // include the file containing local settings and create the $local object
