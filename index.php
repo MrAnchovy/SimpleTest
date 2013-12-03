@@ -12,6 +12,7 @@
 **/
 
 namespace Sins;
+use Exception;
 
 // We don't want to see anything nasty (set this to 1 to find out what is wrong
 // if you are getting a blank screen).
@@ -21,68 +22,34 @@ ini_set('display_errors', 1);
 $startTime = microtime(true);
 
 class DefaultLocal {
-    // these properties are set in bootstrap.php so do not set them here
-    public $baseDir;
-    public $startTime;
-    public $runmode = 'development';
-    public $assetsUrl = 'assets/';
-    public $baseUrl;
-    public $apiUrl;
 
-    public function __construct()
+    const DEVELOPMENT = 'development';
+    const TESTING     = 'testing';
+    const STAGING     = 'staging';
+    const PRODUCTION  = 'production';
+
+    public function init()
     {
-        $this->baseUrl = $_SERVER['REQUEST_URI'];
-        $this->apiUrl = $_SERVER['REQUEST_URI'];
     }
 
+    final public function _init()
+    {
+        $this->runmode     = self::PRODUCTION;
+        $this->baseUrl     = $_SERVER['REQUEST_URI'];
+        $this->apiUrl      = $_SERVER['REQUEST_URI'];
+        $this->assetsUrl   = 'assets/';
+        $this->testBaseDir = realpath(__DIR__);
+        $this->init();
+    }
 }
 
 // include the file containing local settings and create the $local object
-include __DIR__ . '/sins-local-default.php';
-$local = new \Sins\Local;
+try {
+    include __DIR__ . '/sins-local-default.php';
+    $local = new Local;
+} catch (Exception $e) {
+    $local = new DefaultLocal;
+}
 
 // include the bootstrap file
 include __DIR__ . '/bootstrap.php';
-
-return;
-
-
-
-$extra = explode('/', $_GET['q']);
-$controller = (count($extra) > 0) ? array_shift($extra) : null;
-$id = (count($extra) > 0) ? array_shift($extra) : null;
-
-
-
-if ($controller === null) {
-    echo 'index page';
-} elseif ($controller = 'tests' && $id === null) {
-    $tests = array();
-    $directories = array(
-        __DIR__.'/../app/tests',
-    );
-    foreach ($directories as $dir) {
-        $tests = array_merge($tests, scan_for_tests($dir));
-    }
-    echo json_encode($tests);
-} elseif ($controller = 'tests') {
-    require $id;
-}
-
-function scan_for_tests($dir) {
-    $dir = realpath($dir);
-    $tests = array();
-    $dh = dir($dir);
-    while (false !== ($entry = $dh->read())) {
-        $path = $dir.DIRECTORY_SEPARATOR.$entry;
-        if (is_dir($path) && $entry !== '..' && $entry !== '.') {
-            $tests = array_merge($tests, scan_for_tests($path));
-        } elseif (stripos($entry, 'test') !== false) {
-            $tests[] = $path;
-        }
-    }
-    return $tests;
-}
-
-return;
-

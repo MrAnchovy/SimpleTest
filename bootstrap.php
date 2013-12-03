@@ -33,6 +33,7 @@ try {
 
     // set the directory containing Sins
     $local->baseDir = __DIR__ . DIRECTORY_SEPARATOR;
+    $local->_init();
 
     include __DIR__ . '/classes/Sins/Core.php';
     $core = new Core($local);
